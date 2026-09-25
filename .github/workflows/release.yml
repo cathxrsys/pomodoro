@@ -1,68 +1,69 @@
 name: Release
 
-on: 
+on:
   push:
     tags:
       - 'v*'
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps: 
-      - uses:  actions/checkout@v4
-      
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:  
-          version:  '6.8.0'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_msvc2022_64'
-          modules: 'qtmultimedia qtshadertools'
-          
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with: 
-          arch: x64
-          
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=Release ..
-          cmake --build .  --config Release
-          
-      - name:  Deploy Qt dependencies
-        shell: cmd
-        run: |
-          cd build\Release
-          windeployqt.exe pomodoro-cathxrsys.exe --release --no-translations --qmldir ${{ github.workspace }}
-          
-      - name: Copy VC Runtime
-        run: |
-          $vcRuntime = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "*.dll" | Where-Object { $_.FullName -match "x64\\Microsoft\.VC.*\.CRT" }
-          foreach ($dll in $vcRuntime) {
-            Copy-Item $dll.FullName -Destination "build\Release\" -Force
-          }
-          
-      - name:  Create ZIP
-        run: |
-          Compress-Archive -Path build/Release/* -DestinationPath pomodoro-windows.zip
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:  
-          name:  windows-build
-          path: pomodoro-windows.zip
+  # build-windows:
+  #   runs-on: windows-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Qt
+  #       uses: jurplel/install-qt-action@v4
+  #       with:
+  #         version: '6.8.0'
+  #         host: 'windows'
+  #         target: 'desktop'
+  #         arch: 'win64_msvc2022_64'
+  #         modules: 'qtmultimedia qtshadertools'
+  #
+  #     - name: Setup MSVC
+  #       uses: ilammy/msvc-dev-cmd@v1
+  #       with:
+  #         arch: x64
+  #
+  #     - name: Build
+  #       run: |
+  #         mkdir build
+  #         cd build
+  #         cmake -DCMAKE_BUILD_TYPE=Release ..
+  #         cmake --build . --config Release
+  #
+  #     - name: Deploy Qt dependencies
+  #       shell: cmd
+  #       run: |
+  #         cd build\Release
+  #         windeployqt.exe pomodoro-cathxrsys.exe --release --no-translations --qmldir ${{ github.workspace }}
+  #
+  #     - name: Copy VC Runtime
+  #       run: |
+  #         $vcRuntime = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Recurse -Filter "*.dll" | Where-Object { $_.FullName -match "x64\\Microsoft\.VC.*\.CRT" }
+  #         foreach ($dll in $vcRuntime) {
+  #           Copy-Item $dll.FullName -Destination "build\Release\" -Force
+  #         }
+  #
+  #     - name: Create ZIP
+  #       run: |
+  #         Compress-Archive -Path build/Release/* -DestinationPath pomodoro-windows.zip
+  #
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: windows-build
+  #         path: pomodoro-windows.zip
 
   build-linux:
     runs-on: ubuntu-latest
-    steps: 
-      - uses:  actions/checkout@v4
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install Qt
-        uses:  jurplel/install-qt-action@v3
-        with: 
+        uses: jurplel/install-qt-action@v3
+        with:
           version: '6.8.0'
           modules: 'qtmultimedia qtshadertools'
 
@@ -71,7 +72,7 @@ jobs:
           mkdir build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
-          cmake --build . 
+          cmake --build .
 
       - name: Download linuxdeploy and plugin
         run: |
@@ -95,13 +96,13 @@ jobs:
             libxcb-xinerama0 \
             libxcb-xkb1 \
             libxkbcommon-x11-0
+
           rsvg-convert -w 256 -h 256 resources/tomato.svg -o resources/pomodoro-cathxrsys.png
 
       - name: Package AppImage
-        run:  |
-          # Находим qmake
+        run: |
           QMAKE_PATH=$(find /home/runner/work -name "qmake" -type f 2>/dev/null | grep -E "gcc_64/bin/qmake$" | head -1)
-          
+
           if [ -z "$QMAKE_PATH" ]; then
             echo "ERROR: qmake not found!"
             exit 1
@@ -109,119 +110,110 @@ jobs:
 
           echo "Found qmake: $QMAKE_PATH"
 
-          # Получаем Qt директории
           QT_BASE_DIR=$(dirname $(dirname "$QMAKE_PATH"))
           QT_BIN_DIR="$QT_BASE_DIR/bin"
           QT_LIB_DIR="$QT_BASE_DIR/lib"
           QT_QML_DIR="$QT_BASE_DIR/qml"
           QT_PLUGINS_DIR="$QT_BASE_DIR/plugins"
-          
-          echo "Qt base:  $QT_BASE_DIR"
-          echo "Qt bin:  $QT_BIN_DIR"
+
+          echo "Qt base: $QT_BASE_DIR"
+          echo "Qt bin: $QT_BIN_DIR"
           echo "Qt lib: $QT_LIB_DIR"
           echo "Qt QML: $QT_QML_DIR"
-          
-          # Экспортируем переменные для linuxdeploy-plugin-qt
+          echo "Qt plugins: $QT_PLUGINS_DIR"
+
           export QMAKE="$QMAKE_PATH"
           export QML_SOURCES_PATHS="${{ github.workspace }}"
           export QT_PLUGIN_PATH="$QT_PLUGINS_DIR"
           export LD_LIBRARY_PATH="$QT_LIB_DIR:$LD_LIBRARY_PATH"
           export PATH="$QT_BIN_DIR:$PATH"
-          
-          # Указываем дополнительные Qt модули для включения
           export EXTRA_QT_MODULES="quick;quickcontrols2;multimedia;qml;shadertools"
-          
+
           $QMAKE --version
-          
-          # Создаём структуру AppDir
+
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
           mkdir -p AppDir/usr/bin
-          
-          # Копируем файлы
+
           cp build/pomodoro-cathxrsys AppDir/usr/bin/
           cp resources/pomodoro-cathxrsys.png AppDir/usr/share/icons/hicolor/256x256/apps/
           cp resources/pomodoro-cathxrsys.desktop AppDir/
-          
-          # Запускаем linuxdeploy
+
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --executable AppDir/usr/bin/pomodoro-cathxrsys \
             --desktop-file AppDir/pomodoro-cathxrsys.desktop \
             --icon-file AppDir/usr/share/icons/hicolor/256x256/apps/pomodoro-cathxrsys.png \
             --plugin qt \
             --output appimage
-          
+
           echo "Created AppImage files:"
           ls -la *.AppImage
-          
-          # Переименовываем в предсказуемое имя
+
           cp Pomodoro-x86_64.AppImage pomodoro-cathxrsys.AppImage
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path:  Pomodoro-x86_64.AppImage
+          path: Pomodoro-x86_64.AppImage
 
       - name: Upload executable artifact
-        uses:  actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4
         with:
           name: linux-build
           path: build/pomodoro-cathxrsys
 
-  build-macos: 
-    runs-on: macos-latest
-    steps: 
-      - uses: actions/checkout@v4
-      
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with: 
-          version: '6.8.0'
-          modules: 'qtmultimedia qtshadertools'
-          
-      - name: Build
-        run: |
-          mkdir build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=Release ..
-          cmake --build .
-          
-      - name: Create ZIP
-        run:  |
-          cd build
-          zip -r pomodoro-macos.zip pomodoro-cathxrsys.app
-          
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with: 
-          name: macos-build
-          path: build/pomodoro-macos.zip
+  # build-macos:
+  #   runs-on: macos-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install Qt
+  #       uses: jurplel/install-qt-action@v4
+  #       with:
+  #         version: '6.8.0'
+  #         modules: 'qtmultimedia qtshadertools'
+  #
+  #     - name: Build
+  #       run: |
+  #         mkdir build
+  #         cd build
+  #         cmake -DCMAKE_BUILD_TYPE=Release ..
+  #         cmake --build .
+  #
+  #     - name: Create ZIP
+  #       run: |
+  #         cd build
+  #         zip -r pomodoro-macos.zip pomodoro-cathxrsys.app
+  #
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: macos-build
+  #         path: build/pomodoro-macos.zip
 
-  create-release: 
-    needs: [build-windows, build-linux, build-macos]
+  create-release:
+    needs: [build-linux]
     runs-on: ubuntu-latest
-    permissions: 
+
+    permissions:
       contents: write
-    steps: 
+
+    steps:
       - uses: actions/download-artifact@v4
-        with: 
+        with:
           path: artifacts
-      
-      - name:  List artifacts
-        run:  ls -laR artifacts/
-      
-      - name:  Rename artifacts
-        run:  |
-          mv artifacts/windows-build/pomodoro-windows.zip ./pomodoro-cathxrsys-${{ github.ref_name }}-windows.zip
+
+      - name: List artifacts
+        run: ls -laR artifacts/
+
+      - name: Rename artifacts
+        run: |
           mv artifacts/linux-build/pomodoro-cathxrsys ./pomodoro-cathxrsys-${{ github.ref_name }}-linux
-          mv artifacts/macos-build/pomodoro-macos.zip ./pomodoro-cathxrsys-${{ github.ref_name }}-macos.zip
           mv artifacts/linux-appimage/Pomodoro-x86_64.AppImage ./Pomodoro-x86_64.AppImage
-      
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files:  |
-            pomodoro-cathxrsys-${{ github.ref_name }}-windows.zip
+          files: |
             pomodoro-cathxrsys-${{ github.ref_name }}-linux
-            pomodoro-cathxrsys-${{ github.ref_name }}-macos.zip
             Pomodoro-x86_64.AppImage
