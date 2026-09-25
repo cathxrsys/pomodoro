@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Pomodoro
+Comment=Pomodoro Timer
+Exec=pomodoro-cathxrsys
+Icon=pomodoro-cathxrsys
+Terminal=false
+Type=Application
+Categories=Utility;
